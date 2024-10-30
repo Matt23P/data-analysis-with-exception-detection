@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import VotingClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import LabelEncoder
@@ -25,9 +26,9 @@ def normalizeData(data):
     X_test = scaler.transform(X_test)
     return X_train, X_test, y_train, y_test
 
-def KNearestNeighbours(data):
+def KNearestNeighbours(data, n_number):
     X_train, X_test, y_train, y_test = normalizeData(data)
-    knn = KNeighborsClassifier(n_neighbors=5)
+    knn = KNeighborsClassifier(n_neighbors=n_number)
     knn.fit(X_train, y_train)
     y_pred_knn = knn.predict(X_test)
     print("K-NN Accuracy:", accuracy_score(y_test, y_pred_knn))
@@ -43,9 +44,9 @@ def NaiveBayes(data):
     print("Naive Bayes Classification Report:\n", classification_report(y_test, y_pred_nb))
     return y_pred_nb
 
-def SVMClassification(data):
+def SVMClassification(data, kern):
     X_train, X_test, y_train, y_test = normalizeData(data)
-    svm = SVC(kernel='linear')
+    svm = SVC(kernel=kern)
     svm.fit(X_train, y_train)
     y_pred_svm = svm.predict(X_test)
     print("SVM Accuracy:", accuracy_score(y_test, y_pred_svm))
@@ -116,15 +117,111 @@ def neuralNetwork(data):
     plt.title('Dokładność w trakcie uczenia')
     plt.show()
 
+def visualizeEnsembleComparison(y_test, y_pred_ensemble_knn, y_pred_ensemble_svm, y_pred_ensemble_combined):
+    accuracies = [
+        accuracy_score(y_test, y_pred_ensemble_knn),
+        accuracy_score(y_test, y_pred_ensemble_svm),
+        accuracy_score(y_test, y_pred_ensemble_combined)
+    ]
+    
+    labels = ['3x KNN', '3x SVM', 'KNN & SVM']
+
+    accuracies = [accuracy * 100 for accuracy in accuracies]
+
+    plt.figure(figsize=(10, 6))
+    bars = plt.bar(labels, accuracies, color=['green', 'orange', 'red'])
+    plt.title('Porównanie dokładności klasyfikatorów zespołowych')
+    plt.xlabel('Klasyfikator zespołowy')
+    plt.ylabel('Dokładność (%)')
+
+    plt.ylim(0, 100)
+    plt.gca().set_yticks(range(0, 101, 10))
+    plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{int(x)}%'))
+
+    for bar, accuracy in zip(bars, accuracies):
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 2,
+            f'{accuracy:.1f}%',
+            ha='center',
+            va='bottom'
+        )
+    plt.show()
+
+def ensembleKNN(data, n_neighbors_list):
+    X_train, X_test, y_train, y_test = normalizeData(data)
+    
+    knn_classifiers = [
+        ('knn_{}'.format(n), KNeighborsClassifier(n_neighbors=n)) for n in n_neighbors_list
+    ]
+    
+    ensemble_knn = VotingClassifier(estimators=knn_classifiers, voting='hard')
+    ensemble_knn.fit(X_train, y_train)
+    
+    y_pred_ensemble = ensemble_knn.predict(X_test)
+    print("Ensemble KNN Accuracy:", accuracy_score(y_test, y_pred_ensemble))
+    print("Ensemble KNN Classification Report:\n", classification_report(y_test, y_pred_ensemble))
+    
+    return y_pred_ensemble
+
+def ensembleSVM(data, kernels):
+    X_train, X_test, y_train, y_test = normalizeData(data)
+    
+    svm_classifiers = [
+        ('svm_{}'.format(kernel), SVC(kernel=kernel, probability=True)) for kernel in kernels
+    ]
+    
+    ensemble_svm = VotingClassifier(estimators=svm_classifiers, voting='hard')
+    ensemble_svm.fit(X_train, y_train)
+    
+    y_pred_ensemble = ensemble_svm.predict(X_test)
+    print("Ensemble SVM Accuracy:", accuracy_score(y_test, y_pred_ensemble))
+    print("Ensemble SVM Classification Report:\n", classification_report(y_test, y_pred_ensemble))
+    
+    return y_pred_ensemble
+
+def ensembleKNN_SVM(data, n_neighbors=5, kernel='linear'):
+    X_train, X_test, y_train, y_test = normalizeData(data)
+    
+    knn = KNeighborsClassifier(n_neighbors=n_neighbors)
+    svm = SVC(kernel=kernel, probability=True) 
+    # glosowanie na podstawie prawdopodobienstw
+    ensemble_knn_svm = VotingClassifier(estimators=[
+        ('knn', knn),
+        ('svm', svm)
+    ], voting='soft')
+    
+    ensemble_knn_svm.fit(X_train, y_train)
+    
+    y_pred_ensemble = ensemble_knn_svm.predict(X_test)
+    print("Ensemble KNN-SVM Accuracy:", accuracy_score(y_test, y_pred_ensemble))
+    print("Ensemble KNN-SVM Classification Report:\n", classification_report(y_test, y_pred_ensemble))
+    
+    return y_pred_ensemble
 
 if __name__ == '__main__':
-    newProcessed = pandas.read_csv('./datasets/task1/NewProcessedData.csv')
-    originalProcessed = pandas.read_csv('./datasets/task1/OriginalProcessedData.csv')
+    newPath = 'C:/_studia/_2stopien/data-analysis-with-exception-detection/datasets/task1/NewProcessedData.csv'
+    originalPath = '../datasets/task1/OriginalProcessedData.csv'
+    newProcessed = pandas.read_csv(newPath)
+    # originalProcessed = pandas.read_csv(originalPath)
 
-    y_pred_knn = KNearestNeighbours(newProcessed)
+    y_pred_knn = KNearestNeighbours(newProcessed, 5)
     y_pred_nb = NaiveBayes(newProcessed)
-    y_test, y_pred_svm = SVMClassification(newProcessed)
+    y_test, y_pred_svm = SVMClassification(newProcessed, 'linear')
 
     visualizeComparison(y_test, y_pred_knn, y_pred_nb, y_pred_svm)
 
-    neuralNetwork(newProcessed)
+    # Klasyfikator zespołowy 3x KNN
+    n_neighbors_list = [3, 5, 7]
+    y_pred_ensemble_knn = ensembleKNN(newProcessed, n_neighbors_list)
+
+    # Klasyfikator zespołowy 3x SVM
+    kernels = ['linear', 'rbf', 'poly']
+    y_pred_ensemble_svm = ensembleSVM(newProcessed, kernels)
+
+    # Klasyfikator zespołowy SVM & KNN
+    y_pred_ensemble_combined = ensembleKNN_SVM(newProcessed)
+
+    visualizeEnsembleComparison(y_test, y_pred_ensemble_knn, y_pred_ensemble_svm, y_pred_ensemble_combined)
+
+    # neuralNetwork(newProcessed)
